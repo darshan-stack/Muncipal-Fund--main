@@ -8,6 +8,7 @@ import { Label } from './ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { FileText, Image as ImageIcon, MapPin, CheckCircle2, XCircle, Eye, Loader2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import SecurePDFViewer from './SecurePDFViewer';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -22,6 +23,7 @@ const SupervisorApproval = ({ user }) => {
   const [rejectionReason, setRejectionReason] = useState('');
   const [processing, setProcessing] = useState(false);
   const [viewingFile, setViewingFile] = useState(null);
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
 
   useEffect(() => {
     if (user?.role !== 'supervisor') {
@@ -121,7 +123,15 @@ const SupervisorApproval = ({ user }) => {
   };
 
   const handleFileView = (file) => {
-    setViewingFile(file);
+    // Check if it's a PDF file - use SecurePDFViewer for PDFs
+    const isPDF = file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf');
+    
+    if (isPDF) {
+      setPdfViewerOpen(true);
+      setViewingFile(file);
+    } else {
+      setViewingFile(file);
+    }
   };
 
   const formatCurrency = (amount) => {
@@ -518,13 +528,26 @@ const SupervisorApproval = ({ user }) => {
         </Dialog>
 
         {/* File Viewer Modal */}
-        {viewingFile && (
+        {viewingFile && pdfViewerOpen && (
+          <SecurePDFViewer
+            fileUrl={viewingFile.url}
+            fileName={viewingFile.name}
+            onClose={() => {
+              setPdfViewerOpen(false);
+              setViewingFile(null);
+            }}
+            isAnonymous={true}
+          />
+        )}
+
+        {/* Image/Other File Viewer Modal */}
+        {viewingFile && !pdfViewerOpen && (
           <Dialog open={!!viewingFile} onOpenChange={() => setViewingFile(null)}>
             <DialogContent className="max-w-5xl max-h-[90vh] bg-slate-900 border-slate-700">
               <DialogHeader>
                 <DialogTitle className="text-white">{viewingFile.name}</DialogTitle>
                 <DialogDescription className="text-slate-400 font-mono text-xs">
-                  IPFS: {viewingFile.ipfsHash}
+                  {viewingFile.ipfsHash && `IPFS: ${viewingFile.ipfsHash}`}
                 </DialogDescription>
               </DialogHeader>
               <div className="flex items-center justify-center bg-slate-950 rounded-lg p-4" style={{minHeight: '60vh'}}>

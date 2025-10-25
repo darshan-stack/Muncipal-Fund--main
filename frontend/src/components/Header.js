@@ -1,10 +1,14 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from './ui/button';
-import { Wallet, LogOut, Activity, User } from 'lucide-react';
+import { Input } from './ui/input';
+import { Wallet, LogOut, Activity, User, Search } from 'lucide-react';
 
 const Header = ({ account, chainId, user, onConnect, onDisconnect, onLogout, isConnecting }) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
 
   const isActive = (path) => location.pathname === path;
 
@@ -17,6 +21,15 @@ const Header = ({ account, chainId, user, onConnect, onDisconnect, onLogout, isC
     if (chainId === 80001) return 'Mumbai';
     if (chainId === 137) return 'Polygon';
     return 'Unknown';
+  };
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (searchQuery.trim()) {
+      navigate(`/?search=${encodeURIComponent(searchQuery.trim())}`);
+      setShowSearch(false);
+      setSearchQuery('');
+    }
   };
 
   return (
@@ -97,6 +110,47 @@ const Header = ({ account, chainId, user, onConnect, onDisconnect, onLogout, isC
           </div>
 
           <div className="flex items-center space-x-4">
+            {/* Search Bar */}
+            {user && (
+              <div className="hidden md:block">
+                {showSearch ? (
+                  <form onSubmit={handleSearch} className="flex items-center space-x-2">
+                    <Input
+                      type="text"
+                      placeholder="Search projects..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-64 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
+                      autoFocus
+                      data-testid="search-input"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setShowSearch(false);
+                        setSearchQuery('');
+                      }}
+                      className="text-slate-400"
+                    >
+                      Cancel
+                    </Button>
+                  </form>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowSearch(true)}
+                    className="text-slate-400 hover:text-white"
+                    data-testid="search-btn"
+                  >
+                    <Search className="w-5 h-5" />
+                  </Button>
+                )}
+              </div>
+            )}
+
             {/* User Role Badge */}
             {user && (
               <div className="flex items-center px-3 py-1.5 rounded-lg bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30">

@@ -1,4 +1,4 @@
-require("@nomiclabs/hardhat-waffle");
+require("@nomicfoundation/hardhat-ethers");
 require("@nomiclabs/hardhat-etherscan");
 require("dotenv").config();
 
@@ -9,7 +9,8 @@ module.exports = {
             optimizer: {
                 enabled: true,
                 runs: 200
-            }
+            },
+            viaIR: true  // Enable IR optimizer to fix "Stack too deep" error
         }
     },
     networks: {
@@ -19,9 +20,16 @@ module.exports = {
         localhost: {
             url: "http://127.0.0.1:8545"
         },
+        mumbai: {
+            url: process.env.MUMBAI_RPC_URL || "https://rpc-mumbai.maticvigil.com",
+            accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+            chainId: 80001,
+            gasPrice: 35000000000, // 35 gwei
+            gas: 6000000
+        },
         polygon: {
             url: "https://polygon-mainnet.infura.io/v3/bf7b48767df14f50b99c46ae2e4bf3b8",
-            accounts: ["7eb87f0730b7635a8483f4c2d8fb39a69cef7990b8e3e93b4a44a765df6df77e"],
+            accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
             chainId: 137
         },
         sepolia: {

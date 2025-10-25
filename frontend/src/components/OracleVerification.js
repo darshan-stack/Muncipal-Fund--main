@@ -248,11 +248,13 @@ const OracleVerification = ({ user }) => {
                       <div className="flex items-center space-x-4 text-sm text-slate-400">
                         <span className="flex items-center">
                           <FileText className="w-4 h-4 mr-1 text-blue-400" />
-                          {verification.submission_files?.length || 0} documents
+                          {verification.submission_files?.length || verification.proof_documents?.length || 0} documents
                         </span>
                         <span className="text-slate-600">•</span>
                         <span className="text-xs font-mono">
-                          Contractor: {verification.contractor_address.slice(0, 8)}...
+                          Contractor: {verification.contractor_address 
+                            ? verification.contractor_address.slice(0, 8) + '...' 
+                            : verification.contractor_id || verification.contractor_name || 'Unknown'}
                         </span>
                       </div>
                     </div>

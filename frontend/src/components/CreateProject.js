@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { ethers } from 'ethers';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -8,6 +9,7 @@ import { Textarea } from './ui/textarea';
 import { Label } from './ui/label';
 import { ArrowLeft, Loader2, Upload, X, FileText, Image as ImageIcon, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
+import { transactionService } from '../services/transactionService';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -20,12 +22,21 @@ const CreateProject = ({ account, signer }) => {
     description: '',
     category: 'Infrastructure',
     location: '',
+    state: '',
+    district: '',
+    city: '',
+    pincode: '',
     budget: '',
     duration: '',
     contractorName: '',
     contractorAddress: '',
     milestones: '',
-    documents: ''
+    documents: '',
+    milestone1Task: '',
+    milestone2Task: '',
+    milestone3Task: '',
+    milestone4Task: '',
+    milestone5Task: ''
   });
 
   const [uploadedFiles, setUploadedFiles] = useState({
@@ -93,13 +104,27 @@ const CreateProject = ({ account, signer }) => {
   const handleSubmit = async (e, sendToSupervisor = false) => {
     e.preventDefault();
 
-    if (!formData.name || !formData.description || !formData.budget || !formData.location) {
-      toast.error('Please fill all required fields');
+    if (!formData.name || !formData.description || !formData.budget || !formData.location ||
+        !formData.state || !formData.district || !formData.city || !formData.pincode) {
+      toast.error('Please fill all required fields including location details');
       return;
     }
 
     if (parseFloat(formData.budget) <= 0) {
       toast.error('Budget must be greater than 0');
+      return;
+    }
+    
+    // Validate pincode format
+    if (!/^[0-9]{6}$/.test(formData.pincode)) {
+      toast.error('Please enter a valid 6-digit pincode');
+      return;
+    }
+    
+    // Validate milestone tasks
+    if (!formData.milestone1Task || !formData.milestone2Task || !formData.milestone3Task || 
+        !formData.milestone4Task || !formData.milestone5Task) {
+      toast.error('Please define tasks for all 5 milestones');
       return;
     }
 
@@ -108,41 +133,82 @@ const CreateProject = ({ account, signer }) => {
       return;
     }
 
+    // Check if wallet is connected
+    if (!signer && !window.ethereum) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
     try {
       setLoading(true);
+      
+      // Get signer if not already available
+      let currentSigner = signer;
+      if (!currentSigner) {
+        toast.info('Connecting to MetaMask...');
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        await window.ethereum.request({ method: 'eth_requestAccounts' });
+        currentSigner = await provider.getSigner();
+      }
 
-      // For MVP, we'll create a simulated transaction hash
-      const simulatedTxHash = '0x' + Array.from({ length: 64 }, () => 
-        Math.floor(Math.random() * 16).toString(16)
-      ).join('');
+      toast.info(sendToSupervisor ? 'Creating project on blockchain...' : 'Preparing blockchain transaction...', {
+        description: 'MetaMask will open for confirmation'
+      });
 
-      toast.info(sendToSupervisor ? 'Creating project and sending to supervisor...' : 'Creating project on blockchain...');
+      // Create project data for blockchain
+      const projectData = {
+        name: formData.name,
+        budget: ethers.parseEther(formData.budget), // Convert to wei
+        location: formData.location,
+        milestone1: formData.milestone1Task,
+        milestone2: formData.milestone2Task,
+        milestone3: formData.milestone3Task,
+        milestone4: formData.milestone4Task,
+        milestone5: formData.milestone5Task
+      };
 
-      // Simulate blockchain transaction delay
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Call transactionService to create project on blockchain
+      const txResult = await transactionService.createProject(currentSigner, projectData);
+      
+      toast.success('Transaction confirmed on blockchain!', {
+        description: `Transaction Hash: ${txResult.hash.slice(0, 10)}...`
+      });
 
-      // Create project in backend
+      // Create project in backend with real transaction hash
       const response = await axios.post(`${API}/projects`, {
         name: formData.name,
         description: formData.description,
         category: formData.category,
         location: formData.location,
+        state: formData.state,
+        district: formData.district,
+        city: formData.city,
+        pincode: formData.pincode,
         budget: parseFloat(formData.budget),
         duration: formData.duration,
         contractor_name: formData.contractorName,
         contractor_address: formData.contractorAddress,
         milestones: formData.milestones,
         documents: formData.documents,
-        manager_address: account || '0xDemo',
-        tx_hash: simulatedTxHash,
-        contract_project_id: Math.floor(Math.random() * 10000),
+        milestone_tasks: {
+          milestone1: formData.milestone1Task,
+          milestone2: formData.milestone2Task,
+          milestone3: formData.milestone3Task,
+          milestone4: formData.milestone4Task,
+          milestone5: formData.milestone5Task
+        },
+        manager_address: account || await currentSigner.getAddress(),
+        tx_hash: txResult.hash,
+        contract_project_id: txResult.projectId || Math.floor(Math.random() * 10000),
         tender_documents: uploadedFiles.tenderDocuments,
         design_files: uploadedFiles.designFiles,
         geo_tagged_photos: uploadedFiles.geoTaggedPhotos,
         expected_quality_report: uploadedFiles.expectedQualityReport,
         status: sendToSupervisor ? 'PendingSupervisorApproval' : 'Created',
         sent_to_supervisor: sendToSupervisor,
-        submitted_at: new Date().toISOString()
+        submitted_at: new Date().toISOString(),
+        blockchain_confirmed: true,
+        block_number: txResult.blockNumber
       });
 
       if (sendToSupervisor) {
@@ -152,12 +218,11 @@ const CreateProject = ({ account, signer }) => {
           tender_documents: uploadedFiles.tenderDocuments,
           design_files: uploadedFiles.designFiles,
           geo_tagged_photos: uploadedFiles.geoTaggedPhotos,
-          tx_hash: simulatedTxHash,
+          tx_hash: txResult.hash,
           budget: parseFloat(formData.budget),
           location: formData.location,
           category: formData.category,
           description: formData.description,
-          // Contractor name is NOT sent to supervisor (anonymous)
         });
 
         toast.success('Project created and sent to supervisor for approval!', {
@@ -165,24 +230,21 @@ const CreateProject = ({ account, signer }) => {
         });
       } else {
         toast.success('Project created successfully!', {
-          description: 'Redirecting to Polygonscan...'
+          description: 'View transaction on Polygonscan'
         });
       }
       
-      // Redirect to Polygonscan (or demo page in DEMO mode)
-      const polygonscanUrl = `https://polygonscan.com/tx/${simulatedTxHash}`;
-      
-      // Show modal with Polygonscan link
+      // Show modal with real Polygonscan link
       toast.success(
         <div className="space-y-2">
-          <p>View on Polygonscan:</p>
+          <p className="font-semibold">✅ Transaction Confirmed!</p>
           <a 
-            href={polygonscanUrl} 
+            href={txResult.explorerUrl} 
             target="_blank" 
             rel="noopener noreferrer"
-            className="text-blue-400 hover:underline text-sm break-all"
+            className="text-blue-400 hover:underline text-sm break-all block"
           >
-            {simulatedTxHash}
+            View on Polygonscan →
           </a>
         </div>,
         { duration: 10000 }
@@ -195,7 +257,23 @@ const CreateProject = ({ account, signer }) => {
       
     } catch (error) {
       console.error('Error creating project:', error);
-      toast.error('Failed to create project');
+      
+      // Handle specific error types
+      if (error.code === 'ACTION_REJECTED') {
+        toast.error('Transaction rejected by user');
+      } else if (error.message?.includes('insufficient funds')) {
+        toast.error('Insufficient funds for gas fees', {
+          description: 'Get test MATIC from https://faucet.polygon.technology/'
+        });
+      } else if (error.message?.includes('Contract not deployed')) {
+        toast.error('Smart contract not deployed!', {
+          description: 'Please deploy the contract first. Check COMPLETE_SETUP_GUIDE.md'
+        });
+      } else {
+        toast.error('Failed to create project', {
+          description: error.message || 'Unknown error'
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -267,15 +345,84 @@ const CreateProject = ({ account, signer }) => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="location" className="text-slate-300">Location *</Label>
+                    <Label htmlFor="location" className="text-slate-300">General Location *</Label>
                     <Input
                       id="location"
                       name="location"
-                      placeholder="e.g., Mumbai, Maharashtra"
+                      placeholder="e.g., Central Business District, Near Railway Station"
                       value={formData.location}
                       onChange={handleChange}
                       className="bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
                       data-testid="project-location-input"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* Detailed Location Information */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="state" className="text-slate-300 flex items-center gap-1">
+                      <MapPin className="w-4 h-4" />
+                      State *
+                    </Label>
+                    <Input
+                      id="state"
+                      name="state"
+                      placeholder="e.g., Maharashtra"
+                      value={formData.state}
+                      onChange={handleChange}
+                      className="bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="district" className="text-slate-300 flex items-center gap-1">
+                      <MapPin className="w-4 h-4" />
+                      District *
+                    </Label>
+                    <Input
+                      id="district"
+                      name="district"
+                      placeholder="e.g., Mumbai"
+                      value={formData.district}
+                      onChange={handleChange}
+                      className="bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="city" className="text-slate-300 flex items-center gap-1">
+                      <MapPin className="w-4 h-4" />
+                      City *
+                    </Label>
+                    <Input
+                      id="city"
+                      name="city"
+                      placeholder="e.g., Mumbai"
+                      value={formData.city}
+                      onChange={handleChange}
+                      className="bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
+                      required
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="pincode" className="text-slate-300 flex items-center gap-1">
+                      <MapPin className="w-4 h-4" />
+                      Pincode *
+                    </Label>
+                    <Input
+                      id="pincode"
+                      name="pincode"
+                      placeholder="e.g., 400001"
+                      value={formData.pincode}
+                      onChange={handleChange}
+                      pattern="[0-9]{6}"
+                      maxLength="6"
+                      className="bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
                       required
                     />
                   </div>
@@ -335,18 +482,118 @@ const CreateProject = ({ account, signer }) => {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="milestones" className="text-slate-300">Planned Milestones</Label>
-                  <Textarea
-                    id="milestones"
-                    name="milestones"
-                    placeholder="List major milestones (e.g., Site preparation, Foundation work, Main construction, Finishing)"
-                    value={formData.milestones}
-                    onChange={handleChange}
-                    rows={3}
-                    className="bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 resize-none"
-                    data-testid="project-milestones-input"
-                  />
+                <div className="space-y-4 p-4 bg-slate-800/30 rounded-lg border border-slate-700">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-slate-300 font-semibold">Milestone Tasks (5 Milestones - 20% Each) *</Label>
+                    <span className="text-xs text-slate-400">Define specific tasks for each milestone</span>
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    Each milestone represents 20% of project completion. Contractors must complete these tasks sequentially and submit proof for oracle verification.
+                  </p>
+                  
+                  {/* Milestone 1 - 20% */}
+                  <div className="space-y-2 p-3 bg-slate-900/50 rounded border border-slate-600">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 font-bold">1</div>
+                      <Label htmlFor="milestone1Task" className="text-slate-200">Milestone 1 (20%) *</Label>
+                      <span className="text-xs text-slate-400 ml-auto">Budget: {formData.budget ? `$${(parseFloat(formData.budget) * 0.2).toLocaleString()}` : '$0'}</span>
+                    </div>
+                    <Textarea
+                      id="milestone1Task"
+                      name="milestone1Task"
+                      placeholder="e.g., Site preparation, clearing, boundary marking, soil testing, temporary structures setup"
+                      value={formData.milestone1Task}
+                      onChange={handleChange}
+                      rows={2}
+                      className="bg-slate-800/50 border-slate-600 text-white placeholder:text-slate-500 resize-none text-sm"
+                      required
+                    />
+                  </div>
+
+                  {/* Milestone 2 - 40% */}
+                  <div className="space-y-2 p-3 bg-slate-900/50 rounded border border-slate-600">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-green-500/20 flex items-center justify-center text-green-400 font-bold">2</div>
+                      <Label htmlFor="milestone2Task" className="text-slate-200">Milestone 2 (40%) *</Label>
+                      <span className="text-xs text-slate-400 ml-auto">Budget: {formData.budget ? `$${(parseFloat(formData.budget) * 0.2).toLocaleString()}` : '$0'}</span>
+                    </div>
+                    <Textarea
+                      id="milestone2Task"
+                      name="milestone2Task"
+                      placeholder="e.g., Foundation excavation, concrete pouring, basement construction, waterproofing"
+                      value={formData.milestone2Task}
+                      onChange={handleChange}
+                      rows={2}
+                      className="bg-slate-800/50 border-slate-600 text-white placeholder:text-slate-500 resize-none text-sm"
+                      required
+                    />
+                  </div>
+
+                  {/* Milestone 3 - 60% */}
+                  <div className="space-y-2 p-3 bg-slate-900/50 rounded border border-slate-600">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-yellow-500/20 flex items-center justify-center text-yellow-400 font-bold">3</div>
+                      <Label htmlFor="milestone3Task" className="text-slate-200">Milestone 3 (60%) *</Label>
+                      <span className="text-xs text-slate-400 ml-auto">Budget: {formData.budget ? `$${(parseFloat(formData.budget) * 0.2).toLocaleString()}` : '$0'}</span>
+                    </div>
+                    <Textarea
+                      id="milestone3Task"
+                      name="milestone3Task"
+                      placeholder="e.g., Main structure construction, walls, pillars, roof framework, plumbing rough-in"
+                      value={formData.milestone3Task}
+                      onChange={handleChange}
+                      rows={2}
+                      className="bg-slate-800/50 border-slate-600 text-white placeholder:text-slate-500 resize-none text-sm"
+                      required
+                    />
+                  </div>
+
+                  {/* Milestone 4 - 80% */}
+                  <div className="space-y-2 p-3 bg-slate-900/50 rounded border border-slate-600">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-400 font-bold">4</div>
+                      <Label htmlFor="milestone4Task" className="text-slate-200">Milestone 4 (80%) *</Label>
+                      <span className="text-xs text-slate-400 ml-auto">Budget: {formData.budget ? `$${(parseFloat(formData.budget) * 0.2).toLocaleString()}` : '$0'}</span>
+                    </div>
+                    <Textarea
+                      id="milestone4Task"
+                      name="milestone4Task"
+                      placeholder="e.g., Electrical wiring, HVAC installation, windows, doors, plastering, tiling"
+                      value={formData.milestone4Task}
+                      onChange={handleChange}
+                      rows={2}
+                      className="bg-slate-800/50 border-slate-600 text-white placeholder:text-slate-500 resize-none text-sm"
+                      required
+                    />
+                  </div>
+
+                  {/* Milestone 5 - 100% */}
+                  <div className="space-y-2 p-3 bg-slate-900/50 rounded border border-slate-600">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 font-bold">5</div>
+                      <Label htmlFor="milestone5Task" className="text-slate-200">Milestone 5 (100%) *</Label>
+                      <span className="text-xs text-slate-400 ml-auto">Budget: {formData.budget ? `$${(parseFloat(formData.budget) * 0.2).toLocaleString()}` : '$0'}</span>
+                    </div>
+                    <Textarea
+                      id="milestone5Task"
+                      name="milestone5Task"
+                      placeholder="e.g., Painting, flooring, fixtures, landscaping, final inspections, cleanup, handover"
+                      value={formData.milestone5Task}
+                      onChange={handleChange}
+                      rows={2}
+                      className="bg-slate-800/50 border-slate-600 text-white placeholder:text-slate-500 resize-none text-sm"
+                      required
+                    />
+                  </div>
+                  
+                  <div className="flex items-start gap-2 p-3 bg-blue-500/10 rounded border border-blue-500/30">
+                    <svg className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-xs text-blue-300">
+                      <strong>Important:</strong> Contractors must complete milestones sequentially. Each milestone requires oracle verification before the next begins. Payment is automatically released after verification.
+                    </p>
+                  </div>
                 </div>
               </div>
 

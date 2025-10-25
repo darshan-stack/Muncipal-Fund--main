@@ -1,20 +1,36 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { Progress } from './ui/progress';
-import { Plus, TrendingUp, DollarSign, FolderOpen, CheckCircle2, ExternalLink } from 'lucide-react';
+import { Plus, TrendingUp, DollarSign, FolderOpen, CheckCircle2, ExternalLink, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import TransactionVerificationModal from './TransactionVerificationModal';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
+const CATEGORIES = [
+  'All Categories',
+  'Infrastructure',
+  'Education',
+  'Healthcare',
+  'Environment',
+  'Transportation',
+  'Public Safety',
+  'Community Services',
+  'Other'
+];
+
 const Dashboard = ({ account }) => {
+  const location = useLocation();
   const [projects, setProjects] = useState([]);
+  const [filteredProjects, setFilteredProjects] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [selectedCategory, setSelectedCategory] = useState('All Categories');
+  const [searchQuery, setSearchQuery] = useState('');
   const [verificationModal, setVerificationModal] = useState({
     isOpen: false,
     txHash: '',
@@ -25,6 +41,40 @@ const Dashboard = ({ account }) => {
   useEffect(() => {   
     fetchData();
   }, []);
+
+  // Handle search from URL params
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const search = params.get('search');
+    if (search) {
+      setSearchQuery(search);
+    }
+  }, [location.search]);
+
+  // Filter projects when category or search changes
+  useEffect(() => {
+    let filtered = [...projects];
+
+    // Filter by category
+    if (selectedCategory !== 'All Categories') {
+      filtered = filtered.filter(p => p.category === selectedCategory);
+    }
+
+    // Filter by search query
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(p => 
+        p.name?.toLowerCase().includes(query) ||
+        p.description?.toLowerCase().includes(query) ||
+        p.category?.toLowerCase().includes(query) ||
+        p.location?.toLowerCase().includes(query) ||
+        p.city?.toLowerCase().includes(query) ||
+        p.state?.toLowerCase().includes(query)
+      );
+    }
+
+    setFilteredProjects(filtered);
+  }, [projects, selectedCategory, searchQuery]);
 
   const fetchData = async () => {
     try {
@@ -267,24 +317,97 @@ const Dashboard = ({ account }) => {
 
         {/* Projects List */}
         <div className="space-y-4">
-          <h2 className="text-2xl font-bold text-white" style={{fontFamily: 'Space Grotesk'}}>All Projects</h2>
-          {projects.length === 0 ? (
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <h2 className="text-2xl font-bold text-white" style={{fontFamily: 'Space Grotesk'}}>All Projects</h2>
+            
+            {/* Category Filter */}
+            <div className="flex items-center space-x-3">
+              <Filter className="w-5 h-5 text-slate-400" />
+              <select
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                data-testid="category-filter"
+              >
+                {CATEGORIES.map((category) => (
+                  <option key={category} value={category}>
+                    {category}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Active Filters Display */}
+          {(selectedCategory !== 'All Categories' || searchQuery) && (
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-slate-400">Active filters:</span>
+              {selectedCategory !== 'All Categories' && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-sm">
+                  {selectedCategory}
+                  <button
+                    onClick={() => setSelectedCategory('All Categories')}
+                    className="ml-2 hover:text-blue-300"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+              {searchQuery && (
+                <span className="inline-flex items-center px-3 py-1 rounded-full bg-purple-500/20 text-purple-400 text-sm">
+                  Search: {searchQuery}
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="ml-2 hover:text-purple-300"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+              <button
+                onClick={() => {
+                  setSelectedCategory('All Categories');
+                  setSearchQuery('');
+                }}
+                className="text-sm text-slate-400 hover:text-white"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+
+          {filteredProjects.length === 0 ? (
             <Card className="glass-effect border-slate-700">
               <CardContent className="py-12 text-center">
                 <FolderOpen className="w-16 h-16 text-slate-600 mx-auto mb-4" />
-                <p className="text-slate-400 text-lg">No projects yet</p>
-                {account && (
+                <p className="text-slate-400 text-lg">
+                  {projects.length === 0 
+                    ? 'No projects yet'
+                    : `No projects found matching your filters`}
+                </p>
+                {account && projects.length === 0 && (
                   <Link to="/create">
                     <Button className="mt-4 bg-blue-500 hover:bg-blue-600" data-testid="create-first-project-btn">
                       Create First Project
                     </Button>
                   </Link>
                 )}
+                {filteredProjects.length === 0 && projects.length > 0 && (
+                  <Button
+                    onClick={() => {
+                      setSelectedCategory('All Categories');
+                      setSearchQuery('');
+                    }}
+                    className="mt-4 bg-blue-500 hover:bg-blue-600"
+                  >
+                    Clear Filters
+                  </Button>
+                )}
               </CardContent>
             </Card>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {projects.map((project, index) => {
+              {filteredProjects.map((project, index) => {
                 // Safely handle project data with defaults
                 const spentFunds = project.spent_funds || project.spentFunds || 0;
                 const allocatedFunds = project.allocated_funds || project.allocatedFunds || 0;

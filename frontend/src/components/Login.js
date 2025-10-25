@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Shield, UserCircle, Eye, Loader2 } from 'lucide-react';
+import { Shield, UserCircle, Eye, Loader2, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -36,6 +36,15 @@ const Login = ({ onLogin }) => {
       defaultCreds: { username: 'supervisor', password: 'super123' }
     },
     {
+      id: 'contractor',
+      title: 'Contractor',
+      description: 'Submit tenders and complete milestones',
+      icon: Shield,
+      color: 'from-purple-500 to-purple-600',
+      defaultCreds: null, // Contractors must register
+      requiresSignup: true
+    },
+    {
       id: 'citizen',
       title: 'Citizen',
       description: 'View projects and track fund usage',
@@ -47,8 +56,12 @@ const Login = ({ onLogin }) => {
 
   const handleRoleSelect = (role) => {
     setSelectedRole(role);
-    // Auto-fill credentials for demo
-    setCredentials(role.defaultCreds);
+    // Auto-fill credentials for demo (if available)
+    if (role.defaultCreds) {
+      setCredentials(role.defaultCreds);
+    } else {
+      setCredentials({ username: '', password: '' });
+    }
   };
 
   const handleLogin = async (e) => {
@@ -89,6 +102,12 @@ const Login = ({ onLogin }) => {
   };
 
   const quickLogin = async (role) => {
+    // Don't allow quick login for roles without default credentials
+    if (!role.defaultCreds) {
+      toast.error('This role requires registration. Please sign up first.');
+      return;
+    }
+    
     setCredentials(role.defaultCreds);
     setSelectedRole(role);
     
@@ -134,14 +153,14 @@ const Login = ({ onLogin }) => {
           /* Role Selection Screen */
           <div className="space-y-6">
             <h2 className="text-2xl font-semibold text-white text-center">Select Your Role</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {roles.map((role) => {
                 const Icon = role.icon;
                 return (
                   <Card 
                     key={role.id}
                     className="glass-effect border-slate-700 hover-glow cursor-pointer transition-all hover:scale-105"
-                    onClick={() => handleRoleSelect(role)}
+                    onClick={() => !role.requiresSignup && handleRoleSelect(role)}
                     data-testid={`role-${role.id}`}
                   >
                     <CardHeader className="text-center">
@@ -153,27 +172,49 @@ const Login = ({ onLogin }) => {
                         {role.description}
                       </CardDescription>
                     </CardHeader>
-                    <CardContent>
-                      <Button 
-                        className={`w-full bg-gradient-to-r ${role.color} hover:opacity-90`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          quickLogin(role);
-                        }}
-                        disabled={loading}
-                      >
-                        {loading ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Logging in...
-                          </>
-                        ) : (
-                          `Login as ${role.title}`
-                        )}
-                      </Button>
-                      <p className="text-xs text-slate-500 text-center mt-3">
-                        Demo credentials auto-filled
-                      </p>
+                    <CardContent className="space-y-2">
+                      {role.requiresSignup ? (
+                        <>
+                          <Link to="/contractor/signup">
+                            <Button 
+                              className={`w-full bg-gradient-to-r ${role.color} hover:opacity-90`}
+                            >
+                              <UserPlus className="w-4 h-4 mr-2" />
+                              Register as Contractor
+                            </Button>
+                          </Link>
+                          <Button 
+                            variant="outline"
+                            className="w-full border-slate-700 text-slate-300 hover:bg-slate-800"
+                            onClick={() => handleRoleSelect(role)}
+                          >
+                            Already Registered? Login
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button 
+                            className={`w-full bg-gradient-to-r ${role.color} hover:opacity-90`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              quickLogin(role);
+                            }}
+                            disabled={loading}
+                          >
+                            {loading ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Logging in...
+                              </>
+                            ) : (
+                              `Login as ${role.title}`
+                            )}
+                          </Button>
+                          <p className="text-xs text-slate-500 text-center">
+                            Demo credentials auto-filled
+                          </p>
+                        </>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -184,7 +225,7 @@ const Login = ({ onLogin }) => {
             <Card className="glass-effect border-slate-700 bg-slate-800/30">
               <CardContent className="py-6">
                 <h3 className="text-lg font-semibold text-white mb-4 text-center">Demo Credentials</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
                   <div className="text-center space-y-1">
                     <p className="text-red-400 font-semibold">Admin</p>
                     <p className="text-slate-400">admin / admin123</p>
@@ -192,6 +233,10 @@ const Login = ({ onLogin }) => {
                   <div className="text-center space-y-1">
                     <p className="text-blue-400 font-semibold">Supervisor</p>
                     <p className="text-slate-400">supervisor / super123</p>
+                  </div>
+                  <div className="text-center space-y-1">
+                    <p className="text-purple-400 font-semibold">Contractor</p>
+                    <p className="text-slate-400">Register for blockchain ID</p>
                   </div>
                   <div className="text-center space-y-1">
                     <p className="text-green-400 font-semibold">Citizen</p>

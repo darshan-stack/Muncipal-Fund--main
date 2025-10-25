@@ -6,9 +6,12 @@ import Dashboard from './components/Dashboard';
 import ProjectDetails from './components/ProjectDetails';
 import CreateProject from './components/CreateProject';
 import TransactionHistory from './components/TransactionHistory';
+import AdminTransactionHistory from './components/AdminTransactionHistory';
 import SupervisorApproval from './components/SupervisorApproval';
 import OracleVerification from './components/OracleVerification';
 import Login from './components/Login';
+import ContractorSignup from './components/ContractorSignup';
+import ContractorDashboard from './components/ContractorDashboard';
 import Header from './components/Header';
 import { Toaster } from './components/ui/sonner';
 
@@ -175,15 +178,25 @@ function App() {
             } 
           />
           <Route 
+            path="/contractor/signup" 
+            element={<ContractorSignup />} 
+          />
+          <Route 
             path="/" 
             element={
               isAuthenticated ? (
-                <Dashboard 
-                  account={account}
-                  provider={provider}
-                  signer={signer}
-                  user={user}
-                />
+                user?.role === 'contractor' ? (
+                  <ContractorDashboard 
+                    user={user}
+                  />
+                ) : (
+                  <Dashboard 
+                    account={account}
+                    provider={provider}
+                    signer={signer}
+                    user={user}
+                  />
+                )
               ) : (
                 <Navigate to="/login" replace />
               )
@@ -254,7 +267,11 @@ function App() {
             path="/transactions" 
             element={
               isAuthenticated ? (
-                <TransactionHistory user={user} />
+                user?.role === 'admin' ? (
+                  <AdminTransactionHistory user={user} />
+                ) : (
+                  <TransactionHistory user={user} />
+                )
               ) : (
                 <Navigate to="/login" replace />
               )

@@ -471,16 +471,133 @@ if __name__ == '__main__':            return jsonify({
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
+# ======================
+# CONTRACTOR ENDPOINTS
+# ======================
+
+# In-memory storage for contractors (replace with database later)
+contractors = {}
+
+@app.route('/api/contractors/register', methods=['POST', 'OPTIONS'])
+def register_contractor():
+    """Register a new contractor with blockchain ID"""
+    if request.method == 'OPTIONS':
+        return '', 204
+        
+    try:
+        data = request.json
+        
+        # Validate required fields
+        required = ['blockchain_id', 'company_name', 'email', 'username', 'password']
+        for field in required:
+            if not data.get(field):
+                return jsonify({'error': f'Missing required field: {field}'}), 400
+        
+        # Check if blockchain ID already exists
+        if data['blockchain_id'] in contractors:
+            return jsonify({'error': 'Blockchain ID already registered'}), 400
+        
+        # Check if username already exists
+        for cid, contractor in contractors.items():
+            if contractor.get('username') == data['username']:
+                return jsonify({'error': 'Username already taken'}), 400
+        
+        # Check in users dict too
+        if data['username'] in users:
+            return jsonify({'error': 'Username already taken'}), 400
+        
+        # Store contractor
+        contractors[data['blockchain_id']] = {
+            'blockchain_id': data['blockchain_id'],
+            'company_name': data['company_name'],
+            'contact_person': data.get('contact_person', ''),
+            'email': data['email'],
+            'phone': data.get('phone', ''),
+            'registration_number': data.get('registration_number', ''),
+            'address': data.get('address', ''),
+            'city': data.get('city', ''),
+            'state': data.get('state', ''),
+            'pincode': data.get('pincode', ''),
+            'experience': data.get('experience', 0),
+            'specialization': data.get('specialization', ''),
+            'wallet_address': data.get('wallet_address', ''),
+            'username': data['username'],
+            'password': data['password'],  # In production, hash this!
+            'registration_tx_hash': data.get('registration_tx_hash', ''),
+            'status': data.get('status', 'pending'),
+            'role': 'contractor',
+            'registered_at': datetime.now().isoformat()
+        }
+        
+        # Also add to users dict for login
+        users[data['username']] = {
+            'role': 'contractor',
+            'address': data.get('wallet_address'),
+            'password': data['password'],
+            'blockchain_id': data['blockchain_id']
+        }
+        
+        print(f"✓ Contractor registered: {data['company_name']} ({data['blockchain_id']})")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Contractor registered successfully',
+            'blockchain_id': data['blockchain_id']
+        }), 201
+        
+    except Exception as e:
+        print(f"Error registering contractor: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/contractors/<blockchain_id>', methods=['GET'])
+def get_contractor(blockchain_id):
+    """Get contractor details by blockchain ID"""
+    contractor = contractors.get(blockchain_id)
+    if contractor:
+        # Don't send password
+        contractor_data = contractor.copy()
+        contractor_data.pop('password', None)
+        return jsonify(contractor_data)
+    return jsonify({'error': 'Contractor not found'}), 404
+
+
+@app.route('/api/contractors', methods=['GET'])
+def list_contractors():
+    """List all contractors"""
+    # Return all contractors without passwords
+    contractor_list = []
+    for cid, contractor in contractors.items():
+        contractor_data = contractor.copy()
+        contractor_data.pop('password', None)
+        contractor_list.append(contractor_data)
+    return jsonify(contractor_list)
+
+
 if __name__ == '__main__':
+    print("=" * 70)
     print("🚀 Starting Municipal Fund Tracker API...")
-    print(f"📍 Backend: http://localhost:5000")
-    print(f"🔗 Blockchain: {'Connected' if w3.is_connected() else 'Disconnected'}")
+    print("=" * 70)
+    print(f"\n📍 Backend Server: http://localhost:5000")
+    print(f"🔗 Blockchain: {'✅ Connected' if w3.is_connected() else '❌ Disconnected'}")
     print(f"📜 Contract: {CONTRACT_ADDRESS}")
-    print("\n👥 Demo Accounts:")
-    print("   Admin: admin/admin123")
-    print("   Supervisor: supervisor/super123")
-    print("   Citizen: citizen/citizen123")
-    app.run(debug=True, port=5000)
+    print(f"\n� API Endpoints Available:")
+    print(f"   POST /api/login - User authentication")
+    print(f"   POST /api/contractors/register - Register contractor ✨ NEW!")
+    print(f"   GET  /api/contractors - List all contractors")
+    print(f"   GET  /api/contractors/<id> - Get contractor by ID")
+    print(f"   GET  /api/blockchain/status - Blockchain status")
+    print(f"   GET  /api/projects - List projects")
+    print(f"\n�👥 Demo Accounts:")
+    print(f"   Admin:      admin/admin123")
+    print(f"   Supervisor: supervisor/super123")
+    print(f"   Citizen:    citizen/citizen123")
+    print(f"   Contractor: Register at /contractor/signup")
+    print("\n" + "=" * 70)
+    print("✅ Server ready! Frontend can now register contractors.")
+    print("=" * 70 + "\n")
+    app.run(debug=True, port=5000, host='0.0.0.0')
     milestone_id: Optional[str] = None
     amount: float
     category: str = "General"  # Materials, Labor, Equipment, Services, etc.
