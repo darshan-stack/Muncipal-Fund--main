@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Municipal Fund Tracker - Citizen Portal</title>
+    <script src="https://cdn.jsdelivr.net/npm/web3@1.8.0/dist/web3.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Header -->
+    <header class="gradient-bg text-white p-6 shadow-lg">
+        <div class="container mx-auto">
+            <h1 class="text-4xl font-bold">🏛️ Municipal Fund Transparency Portal</h1>
+            <p class="mt-2 text-lg">Track government projects in your area - powered by blockchain</p>
+            <p class="mt-1 text-sm opacity-90">Every transaction is verifiable, transparent, and immutable</p>
+        </div>
+    </header>
+    
+    <!-- Quick Stats -->
+    <section class="container mx-auto mt-8 px-4">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div class="bg-white rounded-lg shadow-lg p-6 text-center">
+                <div class="text-3xl font-bold text-blue-600" id="totalProjects">0</div>
+                <div class="text-gray-600 mt-2">Total Projects</div>
+            </div>
+            <div class="bg-white rounded-lg shadow-lg p-6 text-center">
+                <div class="text-3xl font-bold text-green-600" id="totalFunds">₹0</div>
+                <div class="text-gray-600 mt-2">Total Allocated</div>
+            </div>
+            <div class="bg-white rounded-lg shadow-lg p-6 text-center">
+                <div class="text-3xl font-bold text-yellow-600" id="activeProjects">0</div>
+                <div class="text-gray-600 mt-2">Active Projects</div>
+            </div>
+            <div class="bg-white rounded-lg shadow-lg p-6 text-center">
+                <div class="text-3xl font-bold text-purple-600" id="completedProjects">0</div>
+                <div class="text-gray-600 mt-2">Completed</div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Pincode Search -->
+    <section class="container mx-auto mt-8 px-4">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-2xl font-bold mb-4">🔍 Find Projects Near You</h2>
+            <div class="flex gap-4">
+                <input 
+                    type="text" 
+                    id="pincodeInput" 
+                    placeholder="Enter your pincode (e.g., 110001)"
+                    class="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    maxlength="6"
+                />
+                <button 
+                    onclick="searchByPincode()"
+                    class="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 font-semibold shadow-md"
+                >
+                    Search
+                </button>
+                <button 
+                    onclick="showAllProjects()"
+                    class="bg-gray-600 text-white px-8 py-3 rounded-lg hover:bg-gray-700 font-semibold shadow-md"
+                >
+                    Show All
+                </button>
+            </div>
+            <p class="text-sm text-gray-500 mt-2">💡 Tip: Enter your pincode to see projects within 20km radius</p>
+        </div>
+    </section>
+    
+    <!-- Top Projects in India -->
+    <section class="container mx-auto mt-8 px-4">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-2xl font-bold mb-4">🏆 Featured Projects</h2>
+            <div id="topProjectsContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="text-center text-gray-500 py-8">Loading projects...</div>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Local Projects -->
+    <section class="container mx-auto mt-8 px-4 mb-8">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-2xl font-bold mb-4">📍 Projects in Your Area</h2>
+            <div id="localProjectsContainer" class="space-y-4">
+                <p class="text-gray-500 text-center py-8">Enter your pincode above to see local projects</p>
+            </div>
+        </div>
+    </section>
+    
+    <!-- Project Detail Modal -->
+    <div id="projectModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 id="modalProjectName" class="text-3xl font-bold text-gray-800"></h2>
+                    <button onclick="closeModal()" class="text-gray-500 hover:text-gray-700 text-3xl">&times;</button>
+                </div>
+                
+                <!-- Project Details -->
+                <div id="modalProjectDetails" class="grid grid-cols-2 gap-4 mb-6">
+                    <!-- Details will be loaded dynamically -->
+                </div>
+                
+                <!-- Milestone Timeline -->
+                <div class="mt-6">
+                    <h3 class="text-xl font-bold mb-4">📊 Milestone Progress</h3>
+                    <div id="milestoneTimeline" class="space-y-3">
+                        <p class="text-gray-500">Loading milestones...</p>
+                    </div>
+                </div>
+                
+                <!-- Citizen Opinion Section -->
+                <div class="mt-6 border-t pt-6">
+                    <h3 class="text-xl font-bold mb-4">💬 Submit Your Opinion</h3>
+                    <textarea 
+                        id="opinionText" 
+                        placeholder="Share your feedback about this project..."
+                        class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        rows="4"
+                    ></textarea>
+                    <div class="mt-3 flex gap-3">
+                        <input 
+                            type="number" 
+                            id="opinionRating" 
+                            placeholder="Rating (1-5)"
+                            min="1" 
+                            max="5"
+                            class="p-3 border border-gray-300 rounded-lg w-32 focus:ring-2 focus:ring-blue-500"
+                        />
+                        <button 
+                            onclick="submitOpinion()"
+                            class="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 font-semibold shadow-md"
+                        >
+                            Submit Opinion
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Existing Opinions -->
+                <div class="mt-6">
+                    <h3 class="text-xl font-bold mb-4">📢 Community Feedback</h3>
+                    <div id="existingOpinions" class="space-y-3 max-h-64 overflow-y-auto">
+                        <p class="text-gray-500">Loading opinions...</p>
+                    </div>
+                </div>
+                
+                <!-- Blockchain Verification -->
+                <div class="mt-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
+                    <h3 class="text-xl font-bold mb-3 text-blue-900">🔗 Verify on Blockchain</h3>
+                    <div class="space-y-2 text-sm">
+                        <p><strong>Smart Contract:</strong> <a id="contractLink" href="#" target="_blank" class="text-blue-600 hover:underline"></a></p>
+                        <p><strong>Project ID:</strong> <span id="projectIdDisplay" class="font-mono"></span></p>
+                        <p><strong>Network:</strong> <span id="networkDisplay">Sepolia Testnet</span></p>
+                        <button 
+                            onclick="verifyOnEtherscan()"
+                            class="mt-3 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 font-semibold shadow-md"
+                        >
+                            View All Transactions on Etherscan →
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let web3;
+        let contract;
+        let currentProjectId;
+        let CONTRACT_ADDRESS;
+        let CONTRACT_ABI;
+        
+        // Initialize Web3 and load contract
+        async function initWeb3() {
+            try {
+                // Load contract address and ABI
+                const addressResponse = await fetch('contractAddress.json');
+                const addressData = await addressResponse.json();
+                CONTRACT_ADDRESS = addressData.contractAddress;
+                
+                const abiResponse = await fetch('contractABI.json');
+                CONTRACT_ABI = await abiResponse.json();
+                
+                // Use public RPC for read-only access (citizens don't need wallet)
+                web3 = new Web3('https://sepolia.infura.io/v3/YOUR_INFURA_KEY');
+                
+                contract = new web3.eth.Contract(CONTRACT_ABI, CONTRACT_ADDRESS);
+                
+                console.log('✓ Web3 initialized');
+                console.log('✓ Contract address:', CONTRACT_ADDRESS);
+                
+                await loadStats();
+                await loadTopProjects();
+                
+            } catch (error) {
+                console.error('Error initializing Web3:', error);
+                // Use mock data if contract not deployed
+                useMockData();
+            }
+        }
+        
+        // Load overall statistics
+        async function loadStats() {
+            try {
+                const projectCount = await contract.methods.projectCounter().call();
+                document.getElementById('totalProjects').textContent = projectCount;
+                
+                // Load all projects to calculate stats
+                let totalBudget = 0;
+                let active = 0;
+                let completed = 0;
+                
+                for (let i = 1; i <= projectCount; i++) {
+                    const project = await contract.methods.projects(i).call();
+                    totalBudget += parseInt(project.budget);
+                    
+                    if (project.status == 2) active++;
+                    if (project.status == 3) completed++;
+                }
+                
+                document.getElementById('totalFunds').textContent = 
+                    '₹' + (web3.utils.fromWei(totalBudget.toString(), 'ether') * 10).toFixed(2) + ' Cr';
+                document.getElementById('activeProjects').textContent = active;
+                document.getElementById('completedProjects').textContent = completed;
+                
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+        
+        // Load top projects
+        async function loadTopProjects() {
+            const container = document.getElementById('topProjectsContainer');
+            container.innerHTML = '<p class="text-gray-500 col-span-full text-center">Loading projects...</p>';
+            
+            try {
+                const projectCount = await contract.methods.projectCounter().call();
+                const projects = [];
+                
+                for (let i = 1; i <= Math.min(projectCount, 6); i++) {
+                    const project = await contract.methods.projects(i).call();
+                    projects.push({
+                        id: i,
+                        name: project.projectName,
+                        budget: web3.utils.fromWei(project.budget, 'ether'),
+                        status: parseInt(project.status),
+                        location: "Delhi NCR" // Mock location
+                    });
+                }
+                
+                if (projects.length === 0) {
+                    container.innerHTML = '<p class="text-gray-500 col-span-full text-center">No projects yet. Deploy the contract first!</p>';
+                    return;
+                }
+                
+                // Sort by budget
+                projects.sort((a, b) => parseFloat(b.budget) - parseFloat(a.budget));
+                
+                // Display projects
+                container.innerHTML = '';
+                projects.forEach(project => {
+                    const card = createProjectCard(project);
+                    container.appendChild(card);
+                });
+                
+            } catch (error) {
+                console.error('Error loading projects:', error);
+                container.innerHTML = '<p class="text-red-500 col-span-full text-center">Error loading projects. Please check console.</p>';
+            }
+        }
+        
+        // Search projects by pincode
+        async function searchByPincode() {
+            const pincode = document.getElementById('pincodeInput').value.trim();
+            
+            if (!/^\d{6}$/.test(pincode)) {
+                alert('Please enter a valid 6-digit pincode');
+                return;
+            }
+            
+            const container = document.getElementById('localProjectsContainer');
+            container.innerHTML = '<p class="text-gray-500 text-center py-4">Searching projects near ' + pincode + '...</p>';
+            
+            // Mock data for demo - in production, this would query backend API
+            setTimeout(() => {
+                const mockProjects = [
+                    { id: 1, name: 'Road Widening Project', budget: '15', status: 2, location: pincode, distance: '2.3 km' },
+                    { id: 2, name: 'Community Park Development', budget: '8', status: 1, location: pincode, distance: '5.1 km' },
+                    { id: 3, name: 'Water Pipeline Upgrade', budget: '12', status: 2, location: pincode, distance: '7.8 km' }
+                ];
+                
+                container.innerHTML = '';
+                mockProjects.forEach(project => {
+                    const card = createLocalProjectCard(project);
+                    container.appendChild(card);
+                });
+            }, 500);
+        }
+        
+        // Show all projects
+        async function showAllProjects() {
+            document.getElementById('pincodeInput').value = '';
+            const container = document.getElementById('localProjectsContainer');
+            container.innerHTML = '<p class="text-gray-500 text-center py-4">Loading all projects...</p>';
+            
+            try {
+                const projectCount = await contract.methods.projectCounter().call();
+                
+                if (projectCount == 0) {
+                    container.innerHTML = '<p class="text-gray-500 text-center py-4">No projects found</p>';
+                    return;
+                }
+                
+                container.innerHTML = '';
+                for (let i = 1; i <= projectCount; i++) {
+                    const project = await contract.methods.projects(i).call();
+                    const projectData = {
+                        id: i,
+                        name: project.projectName,
+                        budget: web3.utils.fromWei(project.budget, 'ether'),
+                        status: parseInt(project.status),
+                        location: 'Delhi NCR',
+                        distance: '-'
+                    };
+                    const card = createLocalProjectCard(projectData);
+                    container.appendChild(card);
+                }
+            } catch (error) {
+                console.error('Error loading all projects:', error);
+                container.innerHTML = '<p class="text-red-500 text-center py-4">Error loading projects</p>';
+            }
+        }
+        
+        // Create project card
+        function createProjectCard(project) {
+            const card = document.createElement('div');
+            card.className = 'border border-gray-200 rounded-lg p-5 hover:shadow-xl transition card-hover cursor-pointer bg-white';
+            card.onclick = () => openProjectDetails(project.id);
+            
+            const statusColors = {
+                0: 'bg-blue-100 text-blue-800',
+                1: 'bg-yellow-100 text-yellow-800',
+                2: 'bg-green-100 text-green-800',
+                3: 'bg-gray-100 text-gray-800'
+            };
+            
+            const statusNames = ['Created', 'Tender Assigned', 'In Progress', 'Completed'];
+            const statusIcons = ['📋', '📝', '🚧', '✅'];
+            
+            card.innerHTML = `
+                <div class="text-3xl mb-3">${statusIcons[project.status]}</div>
+                <h3 class="text-xl font-bold mb-2 text-gray-800">${project.name}</h3>
+                <p class="text-gray-600 mb-2">📍 ${project.location}</p>
+                <p class="text-2xl font-bold text-blue-600 mb-3">₹${(parseFloat(project.budget) * 10).toFixed(2)} Cr</p>
+                <span class="inline-block px-3 py-1 rounded-full text-sm font-semibold ${statusColors[project.status]}">
+                    ${statusNames[project.status]}
+                </span>
+            `;
+            
+            return card;
+        }
+        
+        // Create local project card
+        function createLocalProjectCard(project) {
+            const card = document.createElement('div');
+            card.className = 'border border-gray-200 rounded-lg p-4 hover:shadow-lg transition cursor-pointer bg-white';
+            card.onclick = () => openProjectDetails(project.id);
+            
+            const statusColors = {
+                0: 'bg-blue-100 text-blue-800',
+                1: 'bg-yellow-100 text-yellow-800',
+                2: 'bg-green-100 text-green-800',
+                3: 'bg-gray-100 text-gray-800'
+            };
+            
+            const statusNames = ['Created', 'Tender Assigned', 'In Progress', 'Completed'];
+            
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <div class="flex-1">
+                        <h3 class="text-lg font-bold mb-1">${project.name}</h3>
+                        <p class="text-sm text-gray-600">📍 ${project.distance} from you</p>
+                        <p class="text-xl font-bold text-blue-600 mt-2">₹${project.budget} Cr</p>
+                    </div>
+                    <span class="px-3 py-1 rounded-full text-xs font-semibold ${statusColors[project.status]}">
+                        ${statusNames[project.status]}
+                    </span>
+                </div>
+            `;
+            
+            return card;
+        }
+        
+        // Open project details modal
+        async function openProjectDetails(projectId) {
+            currentProjectId = projectId;
+            const modal = document.getElementById('projectModal');
+            modal.classList.remove('hidden');
+            
+            try {
+                // Load project details
+                const project = await contract.methods.projects(projectId).call();
+                document.getElementById('modalProjectName').textContent = project.projectName;
+                document.getElementById('projectIdDisplay').textContent = projectId;
+                
+                // Display project details
+                const detailsContainer = document.getElementById('modalProjectDetails');
+                detailsContainer.innerHTML = `
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <p class="text-sm text-gray-600">Budget</p>
+                        <p class="text-2xl font-bold text-blue-600">₹${(parseFloat(web3.utils.fromWei(project.budget, 'ether')) * 10).toFixed(2)} Cr</p>
+                    </div>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <p class="text-sm text-gray-600">Status</p>
+                        <p class="text-lg font-semibold">${['Created', 'Tender Assigned', 'In Progress', 'Completed'][project.status]}</p>
+                    </div>
+                `;
+                
+                // Load milestones
+                await loadMilestones(projectId);
+                
+                // Load opinions
+                await loadOpinions(projectId);
+                
+                // Update blockchain verification links
+                const contractLink = document.getElementById('contractLink');
+                contractLink.href = `https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}`;
+                contractLink.textContent = CONTRACT_ADDRESS.substr(0, 10) + '...';
+                
+            } catch (error) {
+                console.error('Error loading project details:', error);
+                alert('Error loading project details');
+            }
+        }
+        
+        function closeModal() {
+            document.getElementById('projectModal').classList.add('hidden');
+        }
+        
+        // Load milestones
+        async function loadMilestones(projectId) {
+            const container = document.getElementById('milestoneTimeline');
+            container.innerHTML = '<p class="text-gray-500">Loading milestones...</p>';
+            
+            // Mock milestones for demo
+            const mockMilestones = [
+                { percentage: 20, status: 'Approved', date: '2024-01-15', hash: 'QmTest1' },
+                { percentage: 40, status: 'Approved', date: '2024-02-20', hash: 'QmTest2' },
+                { percentage: 60, status: 'Submitted', date: '2024-03-10', hash: 'QmTest3' }
+            ];
+            
+            container.innerHTML = '';
+            mockMilestones.forEach(milestone => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200';
+                
+                const statusIcon = milestone.status === 'Approved' ? '✅' : 
+                                   milestone.status === 'Rejected' ? '❌' : '⏳';
+                
+                item.innerHTML = `
+                    <div class="text-3xl">${statusIcon}</div>
+                    <div class="flex-1">
+                        <h4 class="font-bold text-lg">${milestone.percentage}% Completion</h4>
+                        <p class="text-sm text-gray-600">Status: ${milestone.status}</p>
+                        <p class="text-sm text-gray-600">Date: ${milestone.date}</p>
+                    </div>
+                    <button 
+                        onclick="viewProofDocuments('${milestone.hash}')"
+                        class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm font-semibold"
+                    >
+                        View Proof
+                    </button>
+                `;
+                
+                container.appendChild(item);
+            });
+        }
+        
+        // Submit citizen opinion
+        async function submitOpinion() {
+            const opinionText = document.getElementById('opinionText').value.trim();
+            const rating = parseInt(document.getElementById('opinionRating').value);
+            
+            if (!opinionText || !rating) {
+                alert('Please provide both opinion and rating');
+                return;
+            }
+            
+            if (rating < 1 || rating > 5) {
+                alert('Rating must be between 1 and 5');
+                return;
+            }
+            
+            // Mock submission - in production, send to backend API
+            alert('✓ Opinion submitted successfully!\n\nThank you for your feedback!');
+            document.getElementById('opinionText').value = '';
+            document.getElementById('opinionRating').value = '';
+            
+            // Reload opinions
+            await loadOpinions(currentProjectId);
+        }
+        
+        // Load opinions
+        async function loadOpinions(projectId) {
+            const container = document.getElementById('existingOpinions');
+            container.innerHTML = '<p class="text-gray-500">Loading opinions...</p>';
+            
+            // Mock opinions for demo
+            const mockOpinions = [
+                { opinion: 'Great progress! Quality of work is visible.', rating: 5, timestamp: Date.now() - 86400000 },
+                { opinion: 'Work is progressing slowly but steadily.', rating: 3, timestamp: Date.now() - 172800000 },
+                { opinion: 'Excellent transparency in fund usage!', rating: 5, timestamp: Date.now() - 259200000 }
+            ];
+            
+            if (mockOpinions.length === 0) {
+                container.innerHTML = '<p class="text-gray-500">No opinions yet. Be the first to share!</p>';
+                return;
+            }
+            
+            container.innerHTML = '';
+            mockOpinions.forEach(opinion => {
+                const item = document.createElement('div');
+                item.className = 'border-l-4 border-blue-500 pl-4 py-3 bg-gray-50 rounded-r';
+                
+                const stars = '⭐'.repeat(opinion.rating);
+                const date = new Date(opinion.timestamp).toLocaleDateString();
+                
+                item.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div class="flex-1">
+                            <p class="font-medium text-gray-800">${opinion.opinion}</p>
+                            <p class="text-sm text-yellow-600 mt-1">${stars} (${opinion.rating}/5)</p>
+                        </div>
+                        <p class="text-xs text-gray-500">${date}</p>
+                    </div>
+                `;
+                
+                container.appendChild(item);
+            });
+        }
+        
+        // View proof documents
+        function viewProofDocuments(ipfsHash) {
+            window.open(`https://ipfs.io/ipfs/${ipfsHash}`, '_blank');
+        }
+        
+        // Verify on Etherscan
+        function verifyOnEtherscan() {
+            window.open(`https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}`, '_blank');
+        }
+        
+        // Use mock data if contract not available
+        function useMockData() {
+            console.log('Using mock data for demo');
+            document.getElementById('totalProjects').textContent = '12';
+            document.getElementById('totalFunds').textContent = '₹156.8 Cr';
+            document.getElementById('activeProjects').textContent = '8';
+            document.getElementById('completedProjects').textContent = '4';
+            
+            const container = document.getElementById('topProjectsContainer');
+            container.innerHTML = '<p class="text-yellow-600 col-span-full text-center">⚠️ Contract not deployed. Showing mock data. Run deployment first!</p>';
+        }
+        
+        // Initialize on page load
+        window.onload = initWeb3;
+    </script>
+</body>
+</html>
