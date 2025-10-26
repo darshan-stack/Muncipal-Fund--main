@@ -10,6 +10,12 @@ import { Label } from './ui/label';
 import { ArrowLeft, Loader2, Upload, X, FileText, Image as ImageIcon, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { transactionService } from '../services/transactionService';
+import { uploadToPinata } from '../utils/ipfsRealUpload';
+
+// Add BigInt serialization support
+BigInt.prototype.toJSON = function() { 
+  return this.toString() 
+};
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -64,29 +70,74 @@ const CreateProject = ({ account, signer }) => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
-    // Simulate IPFS upload (in production, use actual IPFS)
-    const simulatedIPFSHashes = files.map((file, index) => ({
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      ipfsHash: `Qm${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
-      url: URL.createObjectURL(file),
-      uploadedAt: new Date().toISOString()
-    }));
+    try {
+      toast.info(`Uploading ${files.length} file(s) to IPFS...`, {
+        description: 'Please wait, uploading to decentralized storage'
+      });
 
-    setUploadedFiles(prev => ({
-      ...prev,
-      [fileType]: [...prev[fileType], ...simulatedIPFSHashes]
-    }));
+      // Upload files to REAL IPFS using Pinata
+      const uploadPromises = files.map(async (file) => {
+        try {
+          const result = await uploadToPinata(file);
+          
+          if (result.success) {
+            return {
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              ipfsHash: result.ipfsHash,
+              url: result.url,
+              gateway: result.gateway,
+              uploadedAt: new Date().toISOString()
+            };
+          } else {
+            throw new Error(result.error || 'Upload failed');
+          }
+        } catch (error) {
+          console.error(`Failed to upload ${file.name}:`, error);
+          // Fallback to mock IPFS if upload fails
+          return {
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            ipfsHash: `Qm${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
+            url: URL.createObjectURL(file),
+            uploadedAt: new Date().toISOString(),
+            isMock: true
+          };
+        }
+      });
 
-    setFilePreviews(prev => ({
-      ...prev,
-      [fileType]: [...prev[fileType], ...simulatedIPFSHashes]
-    }));
+      const uploadedIPFSFiles = await Promise.all(uploadPromises);
 
-    toast.success(`${files.length} file(s) uploaded successfully!`, {
-      description: 'Files uploaded to IPFS'
-    });
+      setUploadedFiles(prev => ({
+        ...prev,
+        [fileType]: [...prev[fileType], ...uploadedIPFSFiles]
+      }));
+
+      setFilePreviews(prev => ({
+        ...prev,
+        [fileType]: [...prev[fileType], ...uploadedIPFSFiles]
+      }));
+
+      const realUploads = uploadedIPFSFiles.filter(f => !f.isMock).length;
+      const mockUploads = uploadedIPFSFiles.filter(f => f.isMock).length;
+
+      if (realUploads > 0) {
+        toast.success(`${realUploads} file(s) uploaded to IPFS successfully!`, {
+          description: mockUploads > 0 ? `${mockUploads} file(s) used fallback storage` : 'All files stored on decentralized network'
+        });
+      } else if (mockUploads > 0) {
+        toast.warning(`${mockUploads} file(s) uploaded with fallback storage`, {
+          description: 'IPFS upload failed, using local storage'
+        });
+      }
+    } catch (error) {
+      console.error('File upload error:', error);
+      toast.error('Upload failed', {
+        description: error.message || 'Please try again'
+      });
+    }
   };
 
   const removeFile = (fileType, index) => {
@@ -155,10 +206,10 @@ const CreateProject = ({ account, signer }) => {
         description: 'MetaMask will open for confirmation'
       });
 
-      // Create project data for blockchain
+      // Create project data for blockchain (with BigInt for ethers.js)
       const projectData = {
         name: formData.name,
-        budget: ethers.parseEther(formData.budget), // Convert to wei
+        budget: formData.budget, // Keep as string, will convert in transactionService
         location: formData.location,
         milestone1: formData.milestone1Task,
         milestone2: formData.milestone2Task,
@@ -170,12 +221,19 @@ const CreateProject = ({ account, signer }) => {
       // Call transactionService to create project on blockchain
       const txResult = await transactionService.createProject(currentSigner, projectData);
       
-      toast.success('Transaction confirmed on blockchain!', {
-        description: `Transaction Hash: ${txResult.hash.slice(0, 10)}...`
-      });
+      // Show appropriate success message based on mode
+      if (txResult.isMock) {
+        toast.success('Project created in demo mode!', {
+          description: 'Smart contract not deployed. Using simulated transaction for testing.'
+        });
+      } else {
+        toast.success('Transaction confirmed on blockchain!', {
+          description: `Transaction Hash: ${txResult.hash.slice(0, 10)}...`
+        });
+      }
 
-      // Create project in backend with real transaction hash
-      const response = await axios.post(`${API}/projects`, {
+      // Create project in backend (ensure all values are JSON-serializable)
+      const backendProjectData = {
         name: formData.name,
         description: formData.description,
         category: formData.category,
@@ -184,7 +242,7 @@ const CreateProject = ({ account, signer }) => {
         district: formData.district,
         city: formData.city,
         pincode: formData.pincode,
-        budget: parseFloat(formData.budget),
+        budget: parseFloat(formData.budget), // Convert to number
         duration: formData.duration,
         contractor_name: formData.contractorName,
         contractor_address: formData.contractorAddress,
@@ -208,8 +266,11 @@ const CreateProject = ({ account, signer }) => {
         sent_to_supervisor: sendToSupervisor,
         submitted_at: new Date().toISOString(),
         blockchain_confirmed: true,
-        block_number: txResult.blockNumber
-      });
+        block_number: txResult.blockNumber || 0
+      };
+
+      // Send to backend
+      const response = await axios.post(`${API}/projects`, backendProjectData);
 
       if (sendToSupervisor) {
         // Send anonymous tender to supervisor
@@ -226,29 +287,45 @@ const CreateProject = ({ account, signer }) => {
         });
 
         toast.success('Project created and sent to supervisor for approval!', {
-          description: 'Supervisor will review tender documents anonymously'
+          description: txResult.isMock ? 
+            'Demo mode: Supervisor will review tender documents anonymously' :
+            'Supervisor will review tender documents anonymously'
         });
       } else {
         toast.success('Project created successfully!', {
-          description: 'View transaction on Polygonscan'
+          description: txResult.isMock ? 
+            'Demo mode: Project saved in backend' :
+            'View transaction on Polygonscan'
         });
       }
       
-      // Show modal with real Polygonscan link
-      toast.success(
-        <div className="space-y-2">
-          <p className="font-semibold">✅ Transaction Confirmed!</p>
-          <a 
-            href={txResult.explorerUrl} 
-            target="_blank" 
-            rel="noopener noreferrer"
-            className="text-blue-400 hover:underline text-sm break-all block"
-          >
-            View on Polygonscan →
-          </a>
-        </div>,
-        { duration: 10000 }
-      );
+      // Show modal with Polygonscan link (or demo notice)
+      if (!txResult.isMock) {
+        toast.success(
+          <div className="space-y-2">
+            <p className="font-semibold">✅ Transaction Confirmed!</p>
+            <a 
+              href={txResult.explorerUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="text-blue-400 hover:underline text-sm break-all block"
+            >
+              View on Polygonscan →
+            </a>
+          </div>,
+          { duration: 10000 }
+        );
+      } else {
+        toast.info(
+          <div className="space-y-2">
+            <p className="font-semibold">ℹ️ Demo Mode Active</p>
+            <p className="text-sm text-slate-400">
+              Smart contract not deployed. Project saved in backend for testing.
+            </p>
+          </div>,
+          { duration: 8000 }
+        );
+      }
       
       // Navigate to project details after short delay
       setTimeout(() => {

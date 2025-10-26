@@ -23,7 +23,7 @@ const CATEGORIES = [
   'Other'
 ];
 
-const Dashboard = ({ account }) => {
+const Dashboard = ({ account, userRole }) => {
   const location = useLocation();
   const [projects, setProjects] = useState([]);
   const [filteredProjects, setFilteredProjects] = useState([]);
@@ -135,7 +135,7 @@ const Dashboard = ({ account }) => {
           <p className="text-lg text-slate-400 max-w-2xl mx-auto">
             Track government project funding and progress on the blockchain in real-time
           </p>
-          {account && (
+          {account && userRole !== 'citizen' && (
             <Link to="/create">
               <Button 
                 className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white mt-4"

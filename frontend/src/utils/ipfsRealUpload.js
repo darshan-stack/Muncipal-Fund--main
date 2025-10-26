@@ -1,8 +1,8 @@
 // ========== REAL IPFS INTEGRATION FOR PRODUCTION ==========
 // This file provides MULTIPLE IPFS upload methods
-// Priority: Infura > Pinata > Web3.Storage > Mock
+// Priority: Pinata (configured) > Mock
 
-import { create } from 'ipfs-http-client';
+// Note: Infura and Web3.Storage imports removed (not needed for Pinata)
 
 // ========== ENVIRONMENT VARIABLES ==========
 // Add these to your .env file:
@@ -18,58 +18,11 @@ const PINATA_API_KEY = process.env.REACT_APP_PINATA_API_KEY || '';
 const PINATA_SECRET_KEY = process.env.REACT_APP_PINATA_SECRET_KEY || '';
 const WEB3_STORAGE_TOKEN = process.env.REACT_APP_WEB3_STORAGE_TOKEN || '';
 
-// ========== METHOD 1: INFURA IPFS (RECOMMENDED) ==========
-// Get credentials from: https://infura.io/
-
-let infuraClient = null;
-
-const getInfuraClient = () => {
-  if (infuraClient) return infuraClient;
-  
-  if (!INFURA_PROJECT_ID || !INFURA_PROJECT_SECRET) return null;
-  
-  try {
-    const auth = 'Basic ' + btoa(INFURA_PROJECT_ID + ':' + INFURA_PROJECT_SECRET);
-    
-    infuraClient = create({
-      host: 'ipfs.infura.io',
-      port: 5001,
-      protocol: 'https',
-      headers: {
-        authorization: auth,
-      },
-    });
-    
-    console.log('✅ Infura IPFS client initialized');
-    return infuraClient;
-  } catch (error) {
-    console.error('Failed to initialize Infura client:', error);
-    return null;
-  }
-};
-
-export const uploadToInfura = async (file) => {
-  const client = getInfuraClient();
-  if (!client) throw new Error('Infura client not available');
-  
-  try {
-    console.log(`📤 Uploading to Infura: ${file.name}`);
-    
-    const added = await client.add(file, {
-      progress: (prog) => console.log(`Progress: ${prog}`),
-    });
-
-    const cid = added.cid.toString();
-    const url = `https://infura-ipfs.io/ipfs/${cid}`;
-    
-    console.log(`✅ Infura upload successful: ${cid}`);
-    
-    return { success: true, ipfsHash: cid, url, gateway: 'infura', cid };
-  } catch (error) {
-    console.error('Infura upload failed:', error);
-    throw error;
-  }
-};
+// ========== METHOD 1: PINATA (ACTIVE) ==========
+// Get credentials from: https://pinata.cloud/
+// Infura support removed to avoid bundler/runtime dependency on `ipfs-http-client`.
+// If you want Infura support later, we recommend adding the package and a dynamic
+// import. For now the preferred provider is Pinata, with Web3.Storage as a backup.
 
 // ========== METHOD 2: PINATA (ALTERNATIVE) ==========
 // Get credentials from: https://pinata.cloud/
@@ -163,7 +116,6 @@ export const uploadFileToIPFS = async (file) => {
   console.log(`\n🚀 IPFS Upload Started: ${file.name} (${(file.size / 1024).toFixed(2)} KB)\n`);
   
   const methods = [
-    { name: 'Infura', fn: uploadToInfura, available: !!getInfuraClient() },
     { name: 'Pinata', fn: uploadToPinata, available: !!(PINATA_API_KEY && PINATA_SECRET_KEY) },
     { name: 'Web3.Storage', fn: uploadToWeb3Storage, available: !!WEB3_STORAGE_TOKEN },
   ];
@@ -326,7 +278,6 @@ export default {
   uploadFilesToIPFS,
   uploadJSONToIPFS,
   getFromIPFS,
-  uploadToInfura,
   uploadToPinata,
   uploadToWeb3Storage,
   isIPFSConfigured,

@@ -16,6 +16,7 @@ users = {
 contractors = {}
 projects = {}
 tenders = {}
+supervisor_tenders = []  # Tenders pending supervisor approval
 
 @app.route('/')
 def home():
@@ -212,6 +213,99 @@ def get_projects():
         return jsonify(demo_projects)
     return jsonify(list(projects.values()))
 
+@app.route('/api/projects', methods=['POST'])
+def create_project():
+    """Create a new project"""
+    data = request.get_json()
+    
+    project_id = f"proj-{len(projects) + 1}"
+    
+    project = {
+        'id': project_id,
+        'name': data.get('name'),
+        'description': data.get('description'),
+        'category': data.get('category'),
+        'location': data.get('location'),
+        'state': data.get('state'),
+        'district': data.get('district'),
+        'city': data.get('city'),
+        'pincode': data.get('pincode'),
+        'budget': data.get('budget'),
+        'duration': data.get('duration'),
+        'contractor_name': data.get('contractor_name', ''),
+        'contractor_address': data.get('contractor_address', ''),
+        'manager_address': data.get('manager_address'),
+        'tx_hash': data.get('tx_hash'),
+        'contract_project_id': data.get('contract_project_id'),
+        'milestone_tasks': data.get('milestone_tasks', {}),
+        'tender_documents': data.get('tender_documents', []),
+        'design_files': data.get('design_files', []),
+        'geo_tagged_photos': data.get('geo_tagged_photos', []),
+        'expected_quality_report': data.get('expected_quality_report', []),
+        'status': data.get('status', 'Created'),
+        'sent_to_supervisor': data.get('sent_to_supervisor', False),
+        'submitted_at': data.get('submitted_at'),
+        'created_at': datetime.now().isoformat(),
+        'blockchain_confirmed': data.get('blockchain_confirmed', False),
+        'block_number': data.get('block_number')
+    }
+    
+    projects[project_id] = project
+    
+    print(f"✅ Project created: {project_id} - {project['name']}")
+    print(f"   Status: {project['status']}")
+    print(f"   Documents: {len(project['tender_documents'])} tender docs, {len(project['design_files'])} design files")
+    
+    return jsonify({
+        'success': True,
+        'message': 'Project created successfully',
+        'id': project_id,
+        'project': project
+    }), 201
+
+@app.route('/api/supervisor/tenders', methods=['POST'])
+def submit_tender_to_supervisor():
+    """Submit tender to supervisor for approval (anonymous)"""
+    data = request.get_json()
+    
+    tender_id = f"tender-{len(supervisor_tenders) + 1}"
+    
+    # Get project details but keep contractor anonymous
+    project_id = data.get('project_id')
+    project = projects.get(project_id, {})
+    
+    tender = {
+        'id': tender_id,
+        'project_id': project_id,
+        'project_name': project.get('name', 'Unknown Project'),
+        'description': data.get('description', project.get('description', '')),
+        'location': data.get('location', project.get('location', '')),
+        'category': data.get('category', project.get('category', '')),
+        'budget': data.get('budget', project.get('budget', 0)),
+        'tx_hash': data.get('tx_hash'),
+        'status': 'pending',
+        'submitted_at': datetime.now().isoformat(),
+        # Include all uploaded documents with IPFS URLs
+        'tender_documents': data.get('tender_documents', []),
+        'design_files': data.get('design_files', []),
+        'geo_tagged_photos': data.get('geo_tagged_photos', []),
+        # Keep contractor info hidden
+        'contractor_id': 'ANONYMOUS',
+        'contractor_name': 'Hidden for fair evaluation'
+    }
+    
+    supervisor_tenders.append(tender)
+    
+    print(f"✅ Tender submitted to supervisor: {tender_id}")
+    print(f"   Project: {tender['project_name']}")
+    print(f"   Documents: {len(tender['tender_documents'])} PDFs")
+    
+    return jsonify({
+        'success': True,
+        'message': 'Tender submitted to supervisor',
+        'tender_id': tender_id
+    }), 201
+
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
     """Get dashboard statistics"""
@@ -381,69 +475,75 @@ def get_transactions():
 @app.route('/api/supervisor/pending-tenders', methods=['GET'])
 def get_pending_tenders():
     """Get all pending tenders for supervisor approval"""
-    # Return demo pending tenders
-    demo_tenders = [
-        {
-            'id': 'tender-1',
-            'project_id': 'demo-1',
-            'project_name': 'Road Construction - Main Street',
-            'contractor_id': 'CNTR-ANON-001',
-            'submitted_at': '2025-01-15T10:00:00Z',
-            'status': 'pending',
-            'tender_documents': [
-                {
-                    'name': 'Technical Proposal.pdf',
-                    'url': '/uploads/tender1-technical.pdf',
-                    'type': 'pdf'
-                },
-                {
-                    'name': 'Financial Bid.pdf',
-                    'url': '/uploads/tender1-financial.pdf',
-                    'type': 'pdf'
-                }
-            ],
-            'estimated_cost': 480000,
-            'completion_time': '6 months',
-            'experience_years': 10
-        },
-        {
-            'id': 'tender-2',
-            'project_id': 'demo-2',
-            'project_name': 'School Building Renovation',
-            'contractor_id': 'CNTR-ANON-002',
-            'submitted_at': '2025-01-16T14:30:00Z',
-            'status': 'pending',
-            'tender_documents': [
-                {
-                    'name': 'Renovation Plan.pdf',
-                    'url': '/uploads/tender2-plan.pdf',
-                    'type': 'pdf'
-                }
-            ],
-            'estimated_cost': 720000,
-            'completion_time': '8 months',
-            'experience_years': 15
-        }
-    ]
     
-    return jsonify({'tenders': demo_tenders})
+    # Filter only pending tenders
+    pending = [t for t in supervisor_tenders if t['status'] == 'pending']
+    
+    print(f"📋 Supervisor checking pending tenders: {len(pending)} found")
+    for tender in pending:
+        print(f"   - {tender['id']}: {tender['project_name']} ({len(tender.get('tender_documents', []))} docs)")
+    
+    # If no real tenders, return demo data for testing
+    if not pending:
+        demo_tenders = [
+            {
+                'id': 'tender-demo-1',
+                'project_id': 'demo-1',
+                'project_name': 'Road Construction - Main Street',
+                'description': 'Complete road reconstruction with modern drainage system',
+                'location': 'Mumbai, Maharashtra',
+                'category': 'Infrastructure',
+                'budget': 480000,
+                'contractor_id': 'ANONYMOUS',
+                'submitted_at': '2025-01-15T10:00:00Z',
+                'status': 'pending',
+                'tender_documents': [
+                    {
+                        'name': 'Technical Proposal Sample.pdf',
+                        'url': 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf',
+                        'type': 'application/pdf',
+                        'ipfsHash': 'QmDemo123...',
+                        'size': 13264
+                    }
+                ],
+                'design_files': [],
+                'geo_tagged_photos': []
+            }
+        ]
+        return jsonify({'tenders': demo_tenders})
+    
+    return jsonify({'tenders': pending})
 
 @app.route('/api/supervisor/approve-tender', methods=['POST'])
 def approve_tender():
     """Approve a tender"""
     data = request.get_json()
     
-    print(f"=== Approving Tender ===")
-    print(f"Project ID: {data.get('project_id')}")
-    print(f"Tender ID: {data.get('tender_id')}")
+    tender_id = data.get('tender_id')
+    project_id = data.get('project_id')
     
-    # In a real app, update tender status in database
-    # For demo, just return success
+    print(f"=== Approving Tender ===")
+    print(f"Project ID: {project_id}")
+    print(f"Tender ID: {tender_id}")
+    
+    # Update tender status
+    for tender in supervisor_tenders:
+        if tender['id'] == tender_id:
+            tender['status'] = 'approved'
+            tender['approved_at'] = datetime.now().isoformat()
+            tender['approved_by'] = data.get('supervisor_address')
+            print(f"✅ Tender {tender_id} approved")
+            break
+    
+    # Update project status
+    if project_id in projects:
+        projects[project_id]['status'] = 'Approved'
+        projects[project_id]['approved_at'] = datetime.now().isoformat()
     
     return jsonify({
         'success': True,
         'message': 'Tender approved successfully',
-        'tender_id': data.get('tender_id'),
+        'tender_id': tender_id,
         'approved_at': datetime.now().isoformat()
     })
 
@@ -452,12 +552,30 @@ def reject_tender():
     """Reject a tender"""
     data = request.get_json()
     
-    print(f"=== Rejecting Tender ===")
-    print(f"Project ID: {data.get('project_id')}")
-    print(f"Tender ID: {data.get('tender_id')}")
-    print(f"Reason: {data.get('reason')}")
+    tender_id = data.get('tender_id')
+    project_id = data.get('project_id')
+    reason = data.get('reason')
     
-    # In a real app, update tender status in database
+    print(f"=== Rejecting Tender ===")
+    print(f"Project ID: {project_id}")
+    print(f"Tender ID: {tender_id}")
+    print(f"Reason: {reason}")
+    
+    # Update tender status
+    for tender in supervisor_tenders:
+        if tender['id'] == tender_id:
+            tender['status'] = 'rejected'
+            tender['rejected_at'] = datetime.now().isoformat()
+            tender['rejected_by'] = data.get('supervisor_address')
+            tender['rejection_reason'] = reason
+            print(f"❌ Tender {tender_id} rejected")
+            break
+    
+    # Update project status
+    if project_id in projects:
+        projects[project_id]['status'] = 'Rejected'
+        projects[project_id]['rejected_at'] = datetime.now().isoformat()
+        projects[project_id]['rejection_reason'] = reason
     # For demo, just return success
     
     return jsonify({
@@ -582,6 +700,268 @@ def get_tenders(project_id):
     project_tenders = [t for t in tenders.values() if t['project_id'] == project_id]
     return jsonify(project_tenders)
 
+# ============ INDIVIDUAL PROJECT & DETAILS ENDPOINTS ============
+
+@app.route('/api/projects/<project_id>', methods=['GET'])
+def get_project_by_id(project_id):
+    """Get single project by ID"""
+    print(f"Fetching project: {project_id}")
+    
+    # Check if project exists in our projects dictionary
+    if project_id in projects:
+        return jsonify(projects[project_id])
+    
+    # Return demo project for testing
+    demo_project = {
+        'id': project_id,
+        'name': 'City Infrastructure Improvement',
+        'description': 'Comprehensive infrastructure development including roads, drainage, and public facilities',
+        'budget': 1000000,
+        'allocated': 800000,
+        'spent': 450000,
+        'status': 'In Progress',
+        'location': 'Mumbai, Maharashtra',
+        'pincode': '400001',
+        'created_at': '2025-01-10T08:00:00Z',
+        'start_date': '2025-01-15T00:00:00Z',
+        'expected_completion': '2025-12-31T00:00:00Z',
+        'tx_hash': '0x1234567890abcdef1234567890abcdef12345678',
+        'contractor_id': 'CNTR-12345',
+        'contractor_name': 'ABC Infrastructure Ltd.',
+        'supervisor_id': 'supervisor',
+        'progress_percentage': 45
+    }
+    
+    return jsonify(demo_project)
+
+@app.route('/api/milestones/<project_id>', methods=['GET'])
+def get_milestones(project_id):
+    """Get milestones for a project with contractor uploaded documents"""
+    print(f"Fetching milestones for project: {project_id}")
+    
+    demo_milestones = [
+        {
+            'id': f'ms-{project_id}-1',
+            'project_id': project_id,
+            'name': 'Site Preparation & Foundation',
+            'description': 'Initial site clearing and foundation work',
+            'target_amount': 200000,
+            'actual_spent': 180000,
+            'status': 'completed',
+            'target_date': '2025-02-15T00:00:00Z',
+            'completion_date': '2025-02-10T00:00:00Z',
+            'percentage': 20,
+            'documents': [
+                {
+                    'name': 'Site Photos - Before.jpg',
+                    'type': 'image/jpeg',
+                    'url': 'https://gateway.pinata.cloud/ipfs/QmSampleHash1',
+                    'ipfsHash': 'QmSampleHash1',
+                    'uploadedAt': '2025-02-10T10:00:00Z'
+                },
+                {
+                    'name': 'Foundation Completion Report.pdf',
+                    'type': 'application/pdf',
+                    'url': 'https://gateway.pinata.cloud/ipfs/QmSampleHash2',
+                    'ipfsHash': 'QmSampleHash2',
+                    'uploadedAt': '2025-02-10T15:30:00Z'
+                }
+            ]
+        },
+        {
+            'id': f'ms-{project_id}-2',
+            'project_id': project_id,
+            'name': 'Structural Work',
+            'description': 'Main structural construction work',
+            'target_amount': 400000,
+            'actual_spent': 270000,
+            'status': 'in_progress',
+            'target_date': '2025-05-30T00:00:00Z',
+            'completion_date': None,
+            'percentage': 25,
+            'documents': [
+                {
+                    'name': 'Progress Photo Week 1.jpg',
+                    'type': 'image/jpeg',
+                    'url': 'https://gateway.pinata.cloud/ipfs/QmSampleHash3',
+                    'ipfsHash': 'QmSampleHash3',
+                    'uploadedAt': '2025-03-01T09:00:00Z'
+                },
+                {
+                    'name': 'Material Receipts.pdf',
+                    'type': 'application/pdf',
+                    'url': 'https://gateway.pinata.cloud/ipfs/QmSampleHash4',
+                    'ipfsHash': 'QmSampleHash4',
+                    'uploadedAt': '2025-03-05T14:20:00Z'
+                }
+            ]
+        },
+        {
+            'id': f'ms-{project_id}-3',
+            'project_id': project_id,
+            'name': 'Finishing & Quality Check',
+            'description': 'Final finishing work and quality inspection',
+            'target_amount': 200000,
+            'actual_spent': 0,
+            'status': 'pending',
+            'target_date': '2025-08-30T00:00:00Z',
+            'completion_date': None,
+            'percentage': 0,
+            'documents': []
+        }
+    ]
+    
+    return jsonify(demo_milestones)
+
+@app.route('/api/expenditures/<project_id>', methods=['GET'])
+def get_expenditures(project_id):
+    """Get expenditures for a project"""
+    print(f"Fetching expenditures for project: {project_id}")
+    
+    demo_expenditures = [
+        {
+            'id': f'exp-{project_id}-1',
+            'project_id': project_id,
+            'description': 'Material Procurement - Cement & Steel',
+            'amount': 150000,
+            'category': 'Materials',
+            'date': '2025-02-05T00:00:00Z',
+            'approved_by': 'Supervisor',
+            'status': 'approved',
+            'tx_hash': '0xabc123def456',
+            'invoice_number': 'INV-2025-001'
+        },
+        {
+            'id': f'exp-{project_id}-2',
+            'project_id': project_id,
+            'description': 'Labor Costs - Foundation Work',
+            'amount': 80000,
+            'category': 'Labor',
+            'date': '2025-02-10T00:00:00Z',
+            'approved_by': 'Supervisor',
+            'status': 'approved',
+            'tx_hash': '0xdef456ghi789',
+            'invoice_number': 'INV-2025-002'
+        },
+        {
+            'id': f'exp-{project_id}-3',
+            'project_id': project_id,
+            'description': 'Equipment Rental - Excavator',
+            'amount': 45000,
+            'category': 'Equipment',
+            'date': '2025-03-01T00:00:00Z',
+            'approved_by': 'Supervisor',
+            'status': 'approved',
+            'tx_hash': '0xghi789jkl012',
+            'invoice_number': 'INV-2025-003'
+        },
+        {
+            'id': f'exp-{project_id}-4',
+            'project_id': project_id,
+            'description': 'Site Safety Equipment',
+            'amount': 25000,
+            'category': 'Safety',
+            'date': '2025-03-10T00:00:00Z',
+            'approved_by': 'Supervisor',
+            'status': 'pending',
+            'tx_hash': None,
+            'invoice_number': 'INV-2025-004'
+        }
+    ]
+    
+    return jsonify(demo_expenditures)
+
+# ============ CITIZEN SUGGESTIONS & OPINIONS ENDPOINTS ============
+
+# In-memory storage for suggestions and opinions
+suggestions = {}
+opinions = {}
+
+@app.route('/api/suggestions', methods=['POST', 'GET'])
+def handle_suggestions():
+    """Save and retrieve citizen suggestions"""
+    
+    if request.method == 'POST':
+        data = request.get_json()
+        suggestion_id = f"sug-{len(suggestions) + 1}"
+        
+        suggestion = {
+            'id': suggestion_id,
+            'project_id': data.get('project_id'),
+            'project_name': data.get('project_name', 'Unknown Project'),
+            'citizen_name': data.get('citizen_name', 'Anonymous'),
+            'citizen_location': data.get('citizen_location', ''),
+            'suggestion_text': data.get('suggestion', ''),
+            'category': data.get('category', 'general'),
+            'submitted_at': datetime.now().isoformat(),
+            'status': 'new'
+        }
+        
+        suggestions[suggestion_id] = suggestion
+        print(f"✅ New suggestion saved: {suggestion_id}")
+        
+        return jsonify({
+            'success': True,
+            'message': 'Suggestion submitted successfully',
+            'suggestion_id': suggestion_id
+        })
+    
+    else:  # GET
+        # Filter by contractor_id or project_id if provided
+        contractor_id = request.args.get('contractor_id')
+        project_id = request.args.get('project_id')
+        
+        filtered = list(suggestions.values())
+        
+        if project_id:
+            filtered = [s for s in filtered if s['project_id'] == project_id]
+        
+        return jsonify(filtered)
+
+@app.route('/api/opinions', methods=['POST'])
+def save_opinion():
+    """Save citizen opinion with difficulties and suggestions"""
+    data = request.get_json()
+    opinion_id = f"op-{len(opinions) + 1}"
+    
+    opinion = {
+        'id': opinion_id,
+        'project_id': data.get('project_id'),
+        'project_name': data.get('project_name', ''),
+        'citizen_name': data.get('citizen_name', 'Anonymous'),
+        'opinion': data.get('opinion', ''),
+        'difficulty': data.get('difficulty', ''),
+        'suggestion': data.get('suggestion', ''),
+        'issue_type': data.get('issueType', 'general'),
+        'rating': data.get('rating', 3),
+        'submitted_at': datetime.now().isoformat()
+    }
+    
+    opinions[opinion_id] = opinion
+    
+    # Also add to suggestions if suggestion text provided
+    if opinion['suggestion']:
+        suggestion_id = f"sug-{len(suggestions) + 1}"
+        suggestions[suggestion_id] = {
+            'id': suggestion_id,
+            'project_id': opinion['project_id'],
+            'project_name': opinion['project_name'],
+            'citizen_name': opinion['citizen_name'],
+            'suggestion_text': opinion['suggestion'],
+            'category': opinion['issue_type'],
+            'submitted_at': opinion['submitted_at'],
+            'status': 'new',
+            'related_opinion_id': opinion_id
+        }
+    
+    print(f"✅ Opinion saved: {opinion_id}")
+    
+    return jsonify({
+        'success': True,
+        'message': 'Your feedback has been submitted successfully',
+        'opinion_id': opinion_id
+    })
+
 @app.route('/api/health', methods=['GET'])
 def health():
     """Health check endpoint"""
@@ -595,24 +975,34 @@ def health():
 
 if __name__ == '__main__':
     print("=" * 70)
-    print("🚀 Municipal Fund Tracker API - CONTRACTOR VERSION")
+    print("🚀 Municipal Fund Tracker API - FULL VERSION")
     print("=" * 70)
     print(f"\n📍 Server: http://localhost:5000")
     print(f"🏥 Health: http://localhost:5000/api/health")
     print(f"\n📋 Available Endpoints:")
     print(f"   POST /api/login - User authentication")
-    print(f"   POST /api/contractors/register - ✨ Register contractor")
+    print(f"   POST /api/contractors/register - Register contractor")
     print(f"   GET  /api/contractors - List all contractors")
     print(f"   GET  /api/contractors/<id> - Get contractor details")
-    print(f"   GET  /api/projects - List projects")
+    print(f"   GET  /api/projects - List all projects")
+    print(f"   POST /api/projects - ✨ Create new project")
+    print(f"   GET  /api/projects/<id> - Get single project details")
+    print(f"   GET  /api/milestones/<id> - Get project milestones with docs")
+    print(f"   GET  /api/expenditures/<id> - Get project expenditures")
     print(f"   GET  /api/tenders/<project_id> - Get tenders")
+    print(f"   POST /api/supervisor/tenders - ✨ Submit tender to supervisor")
+    print(f"   GET  /api/supervisor/pending-tenders - ✨ View pending tenders")
+    print(f"   POST /api/supervisor/approve-tender - ✨ Approve tender")
+    print(f"   POST /api/supervisor/reject-tender - ✨ Reject tender")
+    print(f"   POST /api/opinions - Submit citizen feedback")
+    print(f"   GET/POST /api/suggestions - Citizen suggestions")
     print(f"\n👥 Demo Accounts:")
     print(f"   Admin:      admin / admin123")
     print(f"   Supervisor: supervisor / super123")
     print(f"   Citizen:    citizen / citizen123")
     print(f"   Contractor: Register at http://localhost:3000/contractor/signup")
     print("\n" + "=" * 70)
-    print("✅ Server ready! Waiting for contractor registrations...")
+    print("✅ Server ready! Projects + Tenders + Supervisor Approval + PDFs!")
     print("=" * 70 + "\n")
     
     try:

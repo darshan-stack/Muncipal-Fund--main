@@ -195,6 +195,7 @@ function App() {
                     provider={provider}
                     signer={signer}
                     user={user}
+                    userRole={user?.role}
                   />
                 )
               ) : (

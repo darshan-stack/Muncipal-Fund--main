@@ -37,6 +37,7 @@ const ContractorDashboard = ({ user }) => {
   const [mySubmissions, setMySubmissions] = useState([]);
   const [activeProjects, setActiveProjects] = useState([]);
   const [completedProjects, setCompletedProjects] = useState([]);
+  const [citizenSuggestions, setCitizenSuggestions] = useState([]);
   const [selectedProject, setSelectedProject] = useState(null);
   const [submitModalOpen, setSubmitModalOpen] = useState(false);
   const [milestoneModalOpen, setMilestoneModalOpen] = useState(false);
@@ -56,10 +57,11 @@ const ContractorDashboard = ({ user }) => {
     try {
       setLoading(true);
       // Fetch all contractor-related data
-      const [tendersRes, submissionsRes, projectsRes] = await Promise.all([
+      const [tendersRes, submissionsRes, projectsRes, suggestionsRes] = await Promise.all([
         axios.get(`${API}/contractor/available-tenders`),
         axios.get(`${API}/contractor/my-submissions?contractor_id=${user.blockchain_id}`),
-        axios.get(`${API}/contractor/my-projects?contractor_id=${user.blockchain_id}`)
+        axios.get(`${API}/contractor/my-projects?contractor_id=${user.blockchain_id}`),
+        axios.get(`${API}/suggestions`).catch(() => ({ data: [] })) // Fallback if fails
       ]);
 
       setAvailableTenders(tendersRes.data.tenders || []);
@@ -68,6 +70,14 @@ const ContractorDashboard = ({ user }) => {
       const projects = projectsRes.data.projects || [];
       setActiveProjects(projects.filter(p => p.status === 'active' || p.status === 'in_progress'));
       setCompletedProjects(projects.filter(p => p.status === 'completed'));
+      
+      // Filter suggestions related to contractor's projects
+      const allSuggestions = Array.isArray(suggestionsRes.data) ? suggestionsRes.data : [];
+      const projectIds = projects.map(p => p.id);
+      const relevantSuggestions = allSuggestions.filter(s => 
+        projectIds.includes(s.project_id)
+      );
+      setCitizenSuggestions(relevantSuggestions);
     } catch (error) {
       console.error('Error fetching contractor data:', error);
       toast.error('Failed to load dashboard data');
@@ -423,6 +433,69 @@ const ContractorDashboard = ({ user }) => {
                       <Upload className="w-4 h-4 mr-2" />
                       Submit Milestone {project.current_milestone} Proof
                     </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Citizen Suggestions & Feedback */}
+        {citizenSuggestions.length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-2xl font-bold text-white flex items-center">
+              <AlertCircle className="w-6 h-6 mr-2 text-yellow-400" />
+              Citizen Suggestions & Feedback
+              <Badge className="ml-3 bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                {citizenSuggestions.length} New
+              </Badge>
+            </h2>
+            
+            <div className="grid grid-cols-1 gap-4">
+              {citizenSuggestions.map((suggestion) => (
+                <Card key={suggestion.id} className="glass-effect border-yellow-500/30 hover:border-yellow-500/50 transition-all">
+                  <CardContent className="pt-6">
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <Badge className="bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                              {suggestion.project_name || 'Project Feedback'}
+                            </Badge>
+                            <Badge className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                              {suggestion.category || 'general'}
+                            </Badge>
+                          </div>
+                          <p className="text-slate-300 leading-relaxed">{suggestion.suggestion_text}</p>
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-700">
+                        <div className="flex items-center space-x-4 text-sm text-slate-400">
+                          <span className="flex items-center">
+                            <MapPin className="w-4 h-4 mr-1" />
+                            {suggestion.citizen_location || 'Citizen'}
+                          </span>
+                          <span>
+                            {new Date(suggestion.submitted_at).toLocaleDateString('en-IN', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {suggestion.status === 'new' && (
+                            <Badge className="bg-green-500/20 text-green-400 border border-green-500/30">
+                              New
+                            </Badge>
+                          )}
+                          <span className="text-sm font-medium text-slate-400">
+                            From: {suggestion.citizen_name || 'Anonymous'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
